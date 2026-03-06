@@ -351,7 +351,7 @@ function QuickActionPill({ action, onClick }) {
 
 function StatusBar() {
   return (
-    <div className="flex items-center justify-between px-8 pt-3 pb-1">
+    <div className="flex items-center justify-between px-8 h-[38px] flex-shrink-0">
       <span className="text-[15px] font-semibold">9:41</span>
       <div className="flex items-center gap-1.5">
         <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="3" width="3" height="9" rx="1" opacity="0.3" /><rect x="5" y="2" width="3" height="10" rx="1" opacity="0.5" /><rect x="10" y="1" width="3" height="11" rx="1" opacity="0.7" /><rect x="15" y="0" width="3" height="12" rx="1" /></svg>
@@ -375,24 +375,30 @@ function BottomNavBar() {
   )
 }
 
-function HeaderBar({ left, onModelClick, currentModel, modelDropdownOpen, rightButtons }) {
+function HeaderBar({ left, center, onModelClick, currentModel, modelDropdownOpen, rightButtons }) {
   return (
-    <div className="relative flex items-center justify-between px-4 py-2.5">
+    <div className="relative flex items-center justify-between px-4 py-2.5 min-h-[52px]">
       <div className="flex-shrink-0 z-10">{left}</div>
-      <button
-        className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1.5"
-        onClick={onModelClick}
-      >
-        {currentModel.icon === 'auto' && <Sparkles size={16} className="text-gray-900" strokeWidth={2} />}
-        {currentModel.icon === 'fast' && <Zap size={16} className="text-gray-900" strokeWidth={2} />}
-        {currentModel.icon === 'expert' && <Lightbulb size={16} className="text-gray-900" strokeWidth={2} />}
-        {currentModel.icon === 'grok420' && <GrokIcon size={16} className="text-gray-900" />}
-        <span className="text-[16px] font-semibold">{currentModel.label}</span>
-        {modelDropdownOpen
-          ? <ChevronUp size={16} className="text-gray-500" />
-          : <ChevronDown size={16} className="text-gray-500" />
-        }
-      </button>
+      {center ? (
+        <div className="absolute left-1/2 -translate-x-1/2">
+          {center}
+        </div>
+      ) : onModelClick && currentModel ? (
+        <button
+          className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1.5"
+          onClick={onModelClick}
+        >
+          {currentModel.icon === 'auto' && <Sparkles size={16} className="text-gray-900" strokeWidth={2} />}
+          {currentModel.icon === 'fast' && <Zap size={16} className="text-gray-900" strokeWidth={2} />}
+          {currentModel.icon === 'expert' && <Lightbulb size={16} className="text-gray-900" strokeWidth={2} />}
+          {currentModel.icon === 'grok420' && <GrokIcon size={16} className="text-gray-900" />}
+          <span className="text-[16px] font-semibold">{currentModel.label}</span>
+          {modelDropdownOpen
+            ? <ChevronUp size={16} className="text-gray-500" />
+            : <ChevronDown size={16} className="text-gray-500" />
+          }
+        </button>
+      ) : null}
       <div className="flex items-center gap-4 z-10">
         {rightButtons}
       </div>
@@ -400,9 +406,89 @@ function HeaderBar({ left, onModelClick, currentModel, modelDropdownOpen, rightB
   )
 }
 
+function TextSelectionPopup({ containerRef, wrapperRef, onAskGrok }) {
+  const [pos, setPos] = useState(null)
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const check = () => {
+      const sel = window.getSelection()
+      if (!sel || sel.isCollapsed || !sel.rangeCount) { setPos(null); return }
+      const range = sel.getRangeAt(0)
+      if (!container.contains(range.commonAncestorContainer)) { setPos(null); return }
+      const rect = range.getBoundingClientRect()
+      const wrapper = wrapperRef?.current || container.parentElement
+      const wRect = wrapper.getBoundingClientRect()
+      setPos({ x: rect.left + rect.width / 2 - wRect.left, y: rect.top - wRect.top })
+    }
+    document.addEventListener('selectionchange', check)
+    return () => document.removeEventListener('selectionchange', check)
+  }, [containerRef, wrapperRef])
+
+  if (!pos) return null
+  const popupWidth = 310
+  const wrapperWidth = wrapperRef?.current?.offsetWidth || 393
+  let left = pos.x - popupWidth / 2
+  if (left < 4) left = 4
+  if (left + popupWidth > wrapperWidth - 4) left = wrapperWidth - popupWidth - 4
+
+  return (
+    <div
+      className="absolute z-[60] flex items-center rounded-full py-0.5 px-0.5"
+      style={{ left, top: pos.y - 40, background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(20px) saturate(180%)', WebkitBackdropFilter: 'blur(20px) saturate(180%)', boxShadow: '0 4px 32px rgba(0,0,0,0.18), 0 0 0 0.5px rgba(0,0,0,0.06)' }}
+    >
+      <button
+        className="flex items-center gap-1.5 px-3 py-[3px] rounded-full active:bg-black/5"
+        onClick={() => {
+          const sel = window.getSelection()
+          const text = sel?.toString()?.trim()
+          if (text && onAskGrok) onAskGrok(text)
+          sel?.removeAllRanges()
+          setPos(null)
+        }}
+      >
+        <img src="/grok-logo.svg" alt="" className="w-3.5 h-3.5" />
+        <span className="text-[13px] text-gray-900 font-medium whitespace-nowrap">Ask Grok</span>
+      </button>
+      <div className="w-px h-4 bg-gray-300/40" />
+      <button
+        className="px-3 py-[3px] rounded-full active:bg-black/5"
+        onClick={() => {
+          const sel = window.getSelection()
+          if (sel) { navigator.clipboard?.writeText(sel.toString()); sel.removeAllRanges() }
+          setPos(null)
+        }}
+      >
+        <span className="text-[13px] text-gray-900 font-medium">Copy</span>
+      </button>
+      <div className="w-px h-4 bg-gray-300/40" />
+      <button
+        className="px-3 py-[3px] rounded-full active:bg-black/5"
+        onClick={() => {
+          const container = containerRef.current
+          if (container) {
+            const range = document.createRange()
+            range.selectNodeContents(container)
+            const sel = window.getSelection()
+            sel?.removeAllRanges()
+            sel?.addRange(range)
+          }
+        }}
+      >
+        <span className="text-[13px] text-gray-900 font-medium whitespace-nowrap">Select All</span>
+      </button>
+      <div className="w-px h-4 bg-gray-300/40" />
+      <button className="px-2 py-[3px] rounded-full active:bg-black/5">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+      </button>
+    </div>
+  )
+}
+
 function BackArrow({ onClick }) {
   return (
-    <button onClick={onClick} className="active:opacity-60">
+    <button onClick={onClick} className="w-8 h-8 flex items-center justify-center active:opacity-60">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
     </button>
   )
@@ -461,9 +547,8 @@ function BottomBarOverlay({ onPlusClick, onInputClick, onEqClick, onMicClick }) 
 function GrokipediaView({ onBack }) {
   return (
     <div className="absolute inset-0 bg-white z-30 flex flex-col" style={{ borderRadius: 44, overflow: 'hidden' }}>
+      <StatusBar />
       <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
-        <StatusBar />
-
         <div className="flex items-center px-4 py-2.5 relative z-10">
           <BackArrow onClick={onBack} />
         </div>
@@ -472,7 +557,7 @@ function GrokipediaView({ onBack }) {
           <span className="text-[15px] text-gray-400 italic -mt-0.5">v0.2</span>
 
           <div className="w-full mt-6">
-            <div className="flex items-center bg-gray-100 rounded-full px-4 py-3 gap-3">
+            <div className="flex items-center bg-gray-100 rounded-full px-3 py-2 gap-2.5">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 flex-shrink-0"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
               <span className="text-[15px] text-gray-400 flex-1">Quantum computing</span>
               <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center flex-shrink-0">
@@ -503,22 +588,22 @@ function GrokipediaView({ onBack }) {
 function VoiceModeView({ onBack, onOpenChatHistory, onOpenNewChat, currentModel, onToggleModelDropdown, modelDropdownOpen }) {
   return (
     <div className="absolute inset-0 bg-white z-30 flex flex-col" style={{ borderRadius: 44, overflow: 'hidden' }}>
+      <StatusBar />
+      <HeaderBar
+        left={<BackArrow onClick={onBack} />}
+        onModelClick={onToggleModelDropdown}
+        currentModel={currentModel}
+        modelDropdownOpen={modelDropdownOpen}
+        rightButtons={<>
+          <button className="active:opacity-60" onClick={onOpenChatHistory}>
+            <Clock size={22} className="text-gray-900" strokeWidth={1.8} />
+          </button>
+          <button className="active:opacity-60" onClick={onOpenNewChat}>
+            <SquarePen size={22} className="text-gray-900" strokeWidth={1.8} />
+          </button>
+        </>}
+      />
       <div className="flex-1 flex flex-col min-h-0">
-        <StatusBar />
-        <HeaderBar
-          left={<BackArrow onClick={onBack} />}
-          onModelClick={onToggleModelDropdown}
-          currentModel={currentModel}
-          modelDropdownOpen={modelDropdownOpen}
-          rightButtons={<>
-            <button className="active:opacity-60" onClick={onOpenChatHistory}>
-              <Clock size={22} className="text-gray-900" strokeWidth={1.8} />
-            </button>
-            <button className="active:opacity-60" onClick={onOpenNewChat}>
-              <SquarePen size={22} className="text-gray-900" strokeWidth={1.8} />
-            </button>
-          </>}
-        />
 
         <div className="flex-1 flex flex-col items-center justify-center">
           <span className="text-[17px] text-gray-400">Start talking</span>
@@ -538,12 +623,12 @@ function VoiceModeView({ onBack, onOpenChatHistory, onOpenNewChat, currentModel,
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex-1 flex items-center bg-gray-100 rounded-full px-4 py-3 gap-2">
+            <div className="flex-1 flex items-center bg-gray-100 rounded-full px-3.5 py-2 gap-2">
               <span className="text-[15px] text-gray-400 flex-1">Ask anything</span>
             </div>
-            <button className="h-[44px] px-5 bg-gray-900 rounded-full flex items-center gap-2 active:bg-gray-700">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
-              <span className="text-[15px] text-white font-medium">Stop</span>
+            <button className="h-[36px] px-4 bg-gray-900 rounded-full flex items-center gap-2 active:bg-gray-700">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="white"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+              <span className="text-[14px] text-white font-medium">Stop</span>
             </button>
           </div>
         </div>
@@ -636,15 +721,17 @@ const CONVERSATIONS = [
 function ChatHistoryView({ onBack, onNewChat }) {
   return (
     <div className="absolute inset-0 bg-white z-30 flex flex-col" style={{ borderRadius: 44, overflow: 'hidden' }}>
+      <StatusBar />
       <div className="flex-1 overflow-y-auto min-h-0">
-        <StatusBar />
-        <div className="flex items-center justify-between px-4 py-2.5">
-          <BackArrow onClick={onBack} />
-          <span className="text-[17px] font-bold">Chat History</span>
-          <button className="active:opacity-60" onClick={onNewChat}>
-            <SquarePen size={22} className="text-gray-900" strokeWidth={1.8} />
-          </button>
-        </div>
+        <HeaderBar
+          left={<BackArrow onClick={onBack} />}
+          center={<span className="text-[17px] font-bold">Chat History</span>}
+          rightButtons={
+            <button className="active:opacity-60" onClick={onNewChat}>
+              <SquarePen size={22} className="text-gray-900" strokeWidth={1.8} />
+            </button>
+          }
+        />
         {/* Content */}
         <div className="px-4">
         <h3 className="text-[15px] font-bold mb-2">Images</h3>
@@ -802,15 +889,17 @@ const POPULAR_POSTS = [
 function GlobalTrendingView({ onBack, onOpenUpload, onVoiceMode, onMicClick }) {
   return (
     <div className="absolute inset-0 bg-white z-30 flex flex-col" style={{ borderRadius: 44, overflow: 'hidden' }}>
+      <StatusBar />
       <div className="flex-1 overflow-y-auto min-h-0">
-        <StatusBar />
-        <div className="flex items-center justify-between px-4 py-2.5">
-          <button onClick={onBack} className="active:opacity-60">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
-          </button>
-          <span className="text-[17px] font-bold">Global Trending</span>
-          <div className="w-6" />
-        </div>
+        <HeaderBar
+          left={
+            <button onClick={onBack} className="active:opacity-60">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+            </button>
+          }
+          center={<span className="text-[17px] font-bold">Global Trending</span>}
+          rightButtons={<div className="w-6" />}
+        />
         {/* Category Cards */}
         <div className="flex gap-2 px-4 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none' }}>
           {TRENDING_CATEGORIES.map((cat) => (
@@ -1340,11 +1429,11 @@ function NewsDetailView({ newsItem, newsDetail, onBack, onOpenUpload, onVoiceMod
 
   return (
     <div className="absolute inset-0 bg-white z-30 flex flex-col" style={{ borderRadius: 44, overflow: 'hidden' }}>
+      <StatusBar />
       <div className="flex-1 overflow-y-auto min-h-0">
-        <StatusBar />
-        <div className="flex items-center justify-between px-4 py-2.5">
-          <BackArrow onClick={onBack} />
-          <div className="flex items-center gap-4">
+        <HeaderBar
+          left={<BackArrow onClick={onBack} />}
+          rightButtons={<>
             <button className="active:opacity-60">
               <Bookmark size={22} className="text-gray-900" strokeWidth={1.8} />
             </button>
@@ -1354,8 +1443,8 @@ function NewsDetailView({ newsItem, newsDetail, onBack, onOpenUpload, onVoiceMod
             <button className="active:opacity-60">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
             </button>
-          </div>
-        </div>
+          </>}
+        />
 
         <div className="px-4 pt-2 pb-4">
           <h1 className="text-[26px] font-extrabold leading-tight">{newsItem.title}</h1>
@@ -1418,8 +1507,10 @@ function SearchResultsView({ query, onBack, onOpenProfile, onOpenChatHistory, on
   const [typedChars, setTypedChars] = useState(0)
   const [doneTyping, setDoneTyping] = useState(false)
   const [voiceListening, setVoiceListening] = useState(false)
+  const [askGrokQuote, setAskGrokQuote] = useState(null)
   const inputRef = useRef(null)
   const summaryRef = useRef(null)
+  const summaryTextRef = useRef(null)
 
   useEffect(() => {
     const timer = setTimeout(() => { setLoading(false); setTypedChars(0); setDoneTyping(false) }, 1000)
@@ -1461,13 +1552,14 @@ function SearchResultsView({ query, onBack, onOpenProfile, onOpenChatHistory, on
       setTypedChars(0)
       setDoneTyping(false)
       setSummaryExpanded(false)
+      setAskGrokQuote(null)
     }
   }
 
   return (
     <div className="absolute inset-0 bg-white z-30 flex flex-col" style={{ borderRadius: 44, overflow: 'hidden' }}>
+      <StatusBar />
       <div className="flex-1 overflow-y-auto min-h-0">
-        <StatusBar />
         <HeaderBar
           left={
             <button onClick={onOpenProfile} className="active:opacity-60">
@@ -1521,10 +1613,11 @@ function SearchResultsView({ query, onBack, onOpenProfile, onOpenChatHistory, on
         ) : (
           <>
             {/* AI Summary */}
-            <div ref={summaryRef} className="px-4 py-4">
+            <div ref={summaryRef} className="px-4 py-4 relative">
+              <TextSelectionPopup containerRef={summaryTextRef} wrapperRef={summaryRef} onAskGrok={(text) => { setAskGrokQuote(text); setSearchFocused(false); setTimeout(() => inputRef.current?.focus(), 50) }} />
               {summaryExpanded ? (
                 <>
-                  <div className="text-[15px] text-gray-900 leading-relaxed" dangerouslySetInnerHTML={{
+                  <div ref={summaryTextRef} className="text-[15px] text-gray-900 leading-relaxed" style={{ userSelect: 'text', WebkitUserSelect: 'text' }} dangerouslySetInnerHTML={{
                     __html: aiSummary.expandedText
                       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                       .split('\n\n').map((para, idx) =>
@@ -1597,14 +1690,14 @@ function SearchResultsView({ query, onBack, onOpenProfile, onOpenChatHistory, on
                     }
                     const showMore = doneTyping ? ' <span class="summary-show-more" style="color:#3b82f6;cursor:pointer">Show more</span>' : ''
                     return (
-                      <div className="text-[15px] text-gray-900 leading-relaxed" dangerouslySetInnerHTML={{
+                      <div ref={!summaryExpanded ? summaryTextRef : undefined} className="text-[15px] text-gray-900 leading-relaxed" style={{ userSelect: 'text', WebkitUserSelect: 'text' }} dangerouslySetInnerHTML={{
                         __html: result + showMore
                       }} onClick={(e) => { if (e.target.classList.contains('summary-show-more')) setSummaryExpanded(true) }} />
                     )
                   })()}
                   <div className={`flex items-center mt-2 transition-opacity duration-300 ${typedChars > 0 || doneTyping ? 'opacity-100' : 'opacity-0'}`}>
                     <img src="/grok-logo.svg" alt="" className="w-4 h-4" style={{ filter: 'brightness(0) opacity(0.4)' }} />
-                    <button onClick={() => setSummaryModalOpen(true)} className={`ml-auto active:opacity-60 transition-opacity duration-300 ${doneTyping ? 'opacity-100' : 'opacity-0'}`}>
+                    <button onClick={() => setSummaryModalOpen(true)} className={`ml-2 active:opacity-60 transition-opacity duration-300 ${doneTyping ? 'opacity-100' : 'opacity-0'}`}>
                       <MoreHorizontal size={16} className="text-gray-300" />
                     </button>
                   </div>
@@ -1612,7 +1705,7 @@ function SearchResultsView({ query, onBack, onOpenProfile, onOpenChatHistory, on
               )}
               <div className={`flex gap-2 mt-3 overflow-x-auto no-scrollbar -mx-4 px-4 transition-opacity duration-300 ${doneTyping || summaryExpanded ? 'opacity-100' : 'opacity-0'}`}>
                 {aiSummary.pills.map((pill) => (
-                  <button key={pill} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 bg-[#f0f0f0] text-[13px] font-medium text-gray-700 active:bg-gray-200" onClick={() => handleNewSearch(pill)}>
+                  <button key={pill} className="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-gray-200 bg-[#f0f0f0] text-[13px] font-medium text-gray-700 active:bg-gray-200" onClick={() => handleNewSearch(pill)}>
                     {pill === 'Think harder' && <Lightbulb size={14} strokeWidth={2} />}
                     {pill}
                   </button>
@@ -1653,12 +1746,6 @@ function SearchResultsView({ query, onBack, onOpenProfile, onOpenChatHistory, on
 
             {activeResultTab === 'People' && (
               <>
-                {PEOPLE_RESULTS[0].followedBy && (
-                  <div className="pt-3 pb-1 flex items-center gap-2 text-[13px] text-gray-500" style={{ paddingLeft: 68 }}>
-                    <Users size={14} strokeWidth={1.8} />
-                    <span>{PEOPLE_RESULTS[0].followedBy}</span>
-                  </div>
-                )}
                 {PEOPLE_RESULTS.map((person, i) => (
                   <div key={i} className="px-4 py-3 border-b border-gray-100">
                     <div className="flex gap-3">
@@ -1713,7 +1800,7 @@ function SearchResultsView({ query, onBack, onOpenProfile, onOpenChatHistory, on
       </div>
 
       {/* Search bar */}
-      {searchFocused ? (
+      {searchFocused && !askGrokQuote ? (
         <>
           <div className="absolute top-0 left-0 right-0 bg-white" style={{ zIndex: 16 }}>
             <StatusBar />
@@ -1796,7 +1883,7 @@ function SearchResultsView({ query, onBack, onOpenProfile, onOpenChatHistory, on
             style={{ bottom: `${kbHeight - 2}px`, background: 'white' }}
           >
             <AddButton onClick={onOpenUpload} />
-            <div className={`flex-1 flex items-center rounded-full pl-3.5 gap-2 shadow-[0_2px_12px_rgba(0,0,0,0.1)] ${voiceListening ? 'bg-[#d6ecff] pr-1.5 py-1.5' : searchText.trim() ? 'bg-white pr-1.5 py-1' : 'bg-white pr-3.5 py-2'}`}>
+            <div className={`flex-1 min-w-0 flex items-center rounded-full pl-3.5 gap-2 shadow-[0_2px_12px_rgba(0,0,0,0.1)] ${voiceListening ? 'bg-[#d6ecff] pr-1.5 py-1.5' : searchText.trim() ? 'bg-white pr-1.5 py-1' : 'bg-white pr-3.5 py-2'}`}>
               <img src="/grok-search-logo.svg" alt="" className="w-5 h-5 flex-shrink-0" />
               {!voiceListening && (
                 <input
@@ -1852,7 +1939,59 @@ function SearchResultsView({ query, onBack, onOpenProfile, onOpenChatHistory, on
           />
         </>
       ) : (
-        <BottomBarOverlay onPlusClick={onOpenUpload} onInputClick={() => setSearchFocused(true)} onEqClick={onVoiceMode} onMicClick={onMicClick} />
+        <>
+          <div
+            className={`absolute left-0 right-0 z-20 px-3 pt-8 pb-3 flex items-end gap-2 transition-all duration-300 ease-out ${askGrokQuote ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
+            style={{ bottom: 64, background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.85) 25%, rgba(255,255,255,1) 45%)' }}
+          >
+            <AddButton onClick={onOpenUpload} />
+            <div className="flex-1 min-w-0 flex flex-col bg-white rounded-[20px] shadow-[0_2px_12px_rgba(0,0,0,0.1)] px-3.5 py-2 gap-1.5">
+              {askGrokQuote && (
+                <div className="inline-flex items-center gap-1 bg-blue-50 rounded-full pl-1.5 pr-1 py-0.5 self-start max-w-full overflow-hidden -ml-1.5">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><polyline points="9 14 4 9 9 4" /><path d="M20 20v-7a4 4 0 0 0-4-4H4" /></svg>
+                  <span className="text-[12px] text-blue-700 font-medium truncate">{askGrokQuote}</span>
+                  <button
+                    className="w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-60"
+                    onClick={() => setAskGrokQuote(null)}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && searchText.trim()) handleNewSearch() }}
+                  placeholder="Ask about this..."
+                  className="text-[15px] text-gray-900 flex-1 bg-transparent outline-none placeholder:text-gray-400"
+                  autoFocus
+                />
+                {searchText.trim() ? (
+                  <button
+                    className="w-7 h-7 rounded-full bg-gray-900 flex items-center justify-center flex-shrink-0"
+                    onClick={handleNewSearch}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" /></svg>
+                  </button>
+                ) : (
+                  <Mic size={18} className="text-gray-400 flex-shrink-0" />
+                )}
+              </div>
+            </div>
+            <button
+              className="text-[13px] text-gray-500 font-medium flex-shrink-0 active:text-gray-700 pl-1 tracking-normal mb-2"
+              onClick={() => { setAskGrokQuote(null); setSearchText('') }}
+            >
+              Cancel
+            </button>
+          </div>
+          <div className={`transition-all duration-300 ease-out ${askGrokQuote ? 'opacity-0 translate-y-4 pointer-events-none' : 'opacity-100 translate-y-0'}`}>
+            <BottomBarOverlay onPlusClick={onOpenUpload} onInputClick={() => setSearchFocused(true)} onEqClick={onVoiceMode} onMicClick={onMicClick} />
+          </div>
+        </>
       )}
 
       {/* Search Summary Modal */}
@@ -1929,6 +2068,12 @@ function SearchResultsView({ query, onBack, onOpenProfile, onOpenChatHistory, on
             </div>
           </div>
       </>
+
+      {askGrokQuote && !searchFocused && (
+        <div className="absolute bottom-0 left-0 right-0 z-10">
+          <BottomNavBar />
+        </div>
+      )}
 
       {wipOpen && <WorkInProgressView onGoBack={() => setWipOpen(false)} />}
     </div>
@@ -2081,7 +2226,7 @@ export default function App() {
     <div className="relative w-[393px] h-[852px] bg-white rounded-[44px] overflow-hidden shadow-2xl" style={{ boxShadow: '0 25px 50px -12px rgba(0,0,0,.25), inset 0 0 0 1px rgba(209,213,219,0.6)' }}>
       {/* Status Bar */}
       <div
-        className={`relative z-[6] flex items-center justify-between px-8 pt-3 pb-1 transition-all duration-200 ${scrollY > 44 ? 'border-b border-gray-100 bg-white' : ''}`}
+        className={`relative z-[6] flex items-center justify-between px-8 h-[38px] transition-all duration-200 ${scrollY > 44 ? 'border-b border-gray-100 bg-white' : ''}`}
       >
         <span className="text-[15px] font-semibold">9:41</span>
         <div className="flex items-center gap-1.5">
